@@ -13,7 +13,11 @@ An automated toolchain and installer to build and run the **devos50/qemu-ios** e
 ---
 
 ## 📱 Apps Needed
-* **Termux** <img src="docs/images/termux.png" width="8%">
+* **Termux**
+* **Termux:X11**
+
+<img src="docs/images/termux.png" width="10%">  <img src="docs/images/x11.png" width="14%">
+
 
 ---
 
