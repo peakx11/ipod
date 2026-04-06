@@ -182,9 +182,10 @@ step_configure() {
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Configuring Build Environment...${NC}"
     echo ""
     cd ~/qemu-ios
-    
-    echo -e "  ${YELLOW}🔧${NC} Patching SYS_gettid..."
-    sed -i 's/SYS_gettid/__NR_gettid/g' util/oslib-posix.c
+
+    echo -e "  ${YELLOW}🔧${NC} Patching gettid for Termux..."
+    sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
+    sed -i 's/syscall(__NR_gettid)/gettid()/g' util/oslib-posix.c
     
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
