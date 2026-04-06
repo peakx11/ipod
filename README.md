@@ -47,6 +47,9 @@ termux-setup-storage
 # - Update
 pkg update && pkg upgrade -y
 
+# - Install Git [if u dont have it]
+pkg install git
+
 # - Git Clone
 git clone https://github.com/peakx11/ipod
 cd ipod
