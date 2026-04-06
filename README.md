@@ -77,6 +77,7 @@ chmod +x ~/start-ios.sh
 
 ## 📜 Credits & Disclaimer
  * QEMU-iOS Core: Developed by devos50.
+ * InstallScript: Made By peakx11
  * UI Inspiration: UI framework inspired by Tech Jarves.
  * Legal Disclaimer: This project is for educational and security research purposes only. Apple ROMs and iOS software are proprietary; ensure you have the legal right to use them before proceeding.
 >
