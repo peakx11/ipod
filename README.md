@@ -37,11 +37,13 @@ To run this lab successfully, your device should meet the following specificatio
 ### 1. Prepare Termux
 Ensure your Termux environment is updated and has storage access:
 ```bash
+1- Setup storage + Update
 termux-setup-storage
 pkg update && pkg upgrade -y
 
 2. Run the Installer
 Download the install_ios.sh script, make it executable, and run it:
+cd ipod
 chmod +x install_ios.sh
 ./install_ios.sh
 
