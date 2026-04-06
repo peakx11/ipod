@@ -183,6 +183,9 @@ step_configure() {
     echo ""
     cd ~/qemu-ios
     
+    echo -e "  ${YELLOW}🔧${NC} Patching SYS_gettid..."
+    sed -i 's/SYS_gettid/__NR_gettid/g' util/oslib-posix.c
+    
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
     
