@@ -1,20 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
-#######################################################
-#  📱 iOS EMULATOR LAB - QEMU-iOS Installer
-#  
-#  Features:
-#  - Auto-compilation of devos50/qemu-ios (ipod_touch_2g branch)
-#  - Auto-downloads requested BootROM, NOR, and NAND images
-#  - Native Termux toolchain setup with OpenSSL
-#  - Termux-X11 + Openbox integration
-#  - One-click emulator launch script
-#######################################################
 
-# ============== CONFIGURATION ==============
 TOTAL_STEPS=9
 CURRENT_STEP=0
+CPU_CORES=4 
 
-# ============== COLORS ==============
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -26,13 +15,10 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-# ============== PROGRESS FUNCTIONS ==============
-# Update overall progress
 update_progress() {
     CURRENT_STEP=$((CURRENT_STEP + 1))
     PERCENT=$((CURRENT_STEP * 100 / TOTAL_STEPS))
     
-    # Create progress bar
     FILLED=$((PERCENT / 5))
     EMPTY=$((20 - FILLED))
     
@@ -49,7 +35,6 @@ update_progress() {
     echo ""
 }
 
-# Spinner animation for running tasks
 spinner() {
     local pid=$1
     local message=$2
@@ -74,7 +59,6 @@ spinner() {
     return $exit_code
 }
 
-# Install package with progress
 install_pkg() {
     local pkg=$1
     local name=${2:-$pkg}
@@ -83,7 +67,6 @@ install_pkg() {
     spinner $! "Installing ${name}..."
 }
 
-# ============== BANNER ==============
 show_banner() {
     clear
     echo -e "${CYAN}"
@@ -101,22 +84,41 @@ BANNER
     echo ""
 }
 
-# ============== DEVICE DETECTION ==============
 detect_device() {
     echo -e "${PURPLE}[*] Detecting your device...${NC}"
     echo ""
     
     DEVICE_MODEL=$(getprop ro.product.model 2>/dev/null || echo "Unknown")
     DEVICE_BRAND=$(getprop ro.product.brand 2>/dev/null || echo "Unknown")
-    CPU_CORES=$(nproc 2>/dev/null || echo "4")
+    MAX_CORES=$(nproc 2>/dev/null || echo "4")
     
     echo -e "  ${GREEN}📱${NC} Device: ${WHITE}${DEVICE_BRAND} ${DEVICE_MODEL}${NC}"
-    echo -e "  ${GREEN}⚙️${NC}  CPU Cores: ${WHITE}${CPU_CORES} (Used for compiling)${NC}"
+    echo -e "  ${GREEN}⚙️${NC}  Available CPU Cores: ${WHITE}${MAX_CORES}${NC}"
+    echo ""
+    
+    echo -n -e "  ${YELLOW}❓ How many cores would you like to use for compiling? [Default: ${MAX_CORES}]: ${NC}"
+    read USER_CORES
+    
+    if [[ -z "$USER_CORES" ]]; then
+        CPU_CORES=$MAX_CORES
+    elif ! [[ "$USER_CORES" =~ ^[0-9]+$ ]]; then
+        echo -e "  ${RED}✗ Invalid input. Using default: ${MAX_CORES}${NC}"
+        CPU_CORES=$MAX_CORES
+    elif [ "$USER_CORES" -gt "$MAX_CORES" ]; then
+        echo -e "  ${YELLOW}⚠️ Warning: Requested ${USER_CORES} cores but only ${MAX_CORES} available. Capping at ${MAX_CORES}.${NC}"
+        CPU_CORES=$MAX_CORES
+    elif [ "$USER_CORES" -le 0 ]; then
+        echo -e "  ${RED}✗ Invalid input. Using default: ${MAX_CORES}${NC}"
+        CPU_CORES=$MAX_CORES
+    else
+        CPU_CORES=$USER_CORES
+    fi
+    
+    echo -e "  ${GREEN}✓${NC} Proceeding with ${WHITE}${CPU_CORES}${NC} cores for compilation."
     echo ""
     sleep 1
 }
 
-# ============== STEP 1: UPDATE SYSTEM ==============
 step_update() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Updating system packages...${NC}"
@@ -129,7 +131,6 @@ step_update() {
     spinner $! "Upgrading installed packages..."
 }
 
-# ============== STEP 2: REPOSITORIES & X11 ==============
 step_x11_setup() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Setting up X11 Environment...${NC}"
@@ -141,7 +142,6 @@ step_x11_setup() {
     install_pkg "xterm" "Xterm Emulator"
 }
 
-# ============== STEP 3: INSTALL DEPENDENCIES ==============
 step_dependencies() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Installing Build Toolchain & Libraries...${NC}"
@@ -161,7 +161,6 @@ step_dependencies() {
     install_pkg "openssl" "OpenSSL (for AES/SHA1)"
 }
 
-# ============== STEP 4: CLONE REPOSITORY ==============
 step_clone() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Fetching QEMU-iOS Source...${NC}"
@@ -173,12 +172,10 @@ step_clone() {
         mv qemu-ios qemu-ios_backup_$(date +%s)
     fi
     
-    # Clone specifically the ipod_touch_2g branch
     (git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git > /dev/null 2>&1) &
     spinner $! "Cloning devos50/qemu-ios (ipod_touch_2g branch)..."
 }
 
-# ============== STEP 5: CONFIGURE BUILD ==============
 step_configure() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Configuring Build Environment...${NC}"
@@ -188,7 +185,6 @@ step_configure() {
     mkdir -p build
     cd build
     
-    # Configure using parameters from RUNNING.md modified for Termux environment
     (../configure \
         --enable-sdl \
         --disable-cocoa \
@@ -202,18 +198,17 @@ step_configure() {
     spinner $! "Running ./configure for ARM-softmmu..."
 }
 
-# ============== STEP 6: COMPILE QEMU ==============
 step_build() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Compiling QEMU-iOS (This takes a while)...${NC}"
     echo ""
     
-    CORES=$(nproc 2>/dev/null || echo "4")
     cd ~/qemu-ios/build
     
     echo -e "  ${GRAY}💡 Tip: You can open a new Termux session and type 'tail -f ~/qemu-ios/build/build.log' to monitor.${NC}"
-    (make -j${CORES} > build.log 2>&1) &
-    spinner $! "Compiling with ${CORES} cores..."
+    
+    (make -j${CPU_CORES} > build.log 2>&1) &
+    spinner $! "Compiling with ${CPU_CORES} cores..."
     
     if [ -f "arm-softmmu/qemu-system-arm" ]; then
         echo -e "  ${GREEN}✓${NC} Compilation successful! Binary created."
@@ -222,7 +217,6 @@ step_build() {
     fi
 }
 
-# ============== STEP 7: DIRECTORY & FILE SETUP ==============
 step_directories_and_files() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Downloading iPod Touch 2G ROMs/Files...${NC}"
@@ -239,12 +233,10 @@ step_directories_and_files() {
     (wget -q "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip" -O ~/ios-workspace/nand_n72ap.zip) &
     spinner $! "Downloading NAND zip file..."
     
-    # Extract the NAND zip (which contains a directory named 'nand') into workspace
     (unzip -o -q ~/ios-workspace/nand_n72ap.zip -d ~/ios-workspace/ && rm ~/ios-workspace/nand_n72ap.zip) &
     spinner $! "Extracting NAND file system..."
 }
 
-# ============== STEP 8: LAUNCHER SCRIPT ==============
 step_launchers() {
     update_progress
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Creating Launchers...${NC}"
@@ -257,7 +249,6 @@ echo ""
 echo "🍏 Starting iOS Emulator Environment..."
 echo ""
 
-# Kill existing sessions
 pkill -9 -f "termux.x11" 2>/dev/null
 pkill -9 -f "openbox" 2>/dev/null
 
@@ -271,7 +262,6 @@ echo "🖥️ Launching Window Manager..."
 openbox-session &
 sleep 1
 
-# Launch Terminal in the workspace
 cd ~/ios-workspace
 xterm -fa 'Monospace' -fs 10 -geometry 80x24 -title "QEMU-iOS Launcher" -e "
 echo '===================================='
@@ -302,7 +292,6 @@ LAUNCHEREOF
     echo -e "  ${GREEN}✓${NC} Created ~/start-ios.sh"
 }
 
-# ============== COMPLETION ==============
 show_completion() {
     echo ""
     echo -e "${GREEN}"
@@ -328,7 +317,6 @@ COMPLETE
     echo ""
 }
 
-# ============== MAIN PROCESS ==============
 main() {
     show_banner
     
@@ -340,7 +328,6 @@ main() {
     echo -e "${YELLOW}  Press Enter to start installation, or Ctrl+C to cancel...${NC}"
     read
     
-    # Execution pipeline
     detect_device
     step_update
     step_x11_setup
@@ -351,9 +338,7 @@ main() {
     step_directories_and_files
     step_launchers
     
-    # Output wrap-up
     show_completion
 }
 
-# ============== RUN ==============
 main
