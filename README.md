@@ -1,4 +1,4 @@
-# 🍏 iOS-Emulator-Lab: QEMU-iOS on Android
+# 🍏 Ipod-Touch-2G Termux
 
 ![License](https://img.shields.io/badge/License-Research_Only-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android_Termux-green.svg)
