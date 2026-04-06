@@ -12,15 +12,6 @@ An automated toolchain and installer to build and run the **devos50/qemu-ios** e
 
 ---
 
-## 📱 Apps Needed
-* **Termux**
-* **Termux:X11**
-
-<img src="docs/images/termux.png" width="10%">  <img src="docs/images/x11.png" width="14%">
-
-
----
-
 ## 🌟 Features
 * **Automatic Build:** Compiles QEMU from source optimized for the `ipod_touch_2g` branch.
 * **ROM Auto-Provisioning:** Downloads required BootROM, NOR, and NAND images from official release assets.
