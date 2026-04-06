@@ -1,0 +1,33 @@
+name: Bug report
+description: Report bugs with the engine here
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: "Describe the bug here."
+    validations:
+      required: true
+
+  - type: textarea
+    id: terminal
+    attributes:
+      label: "Termux Logs"
+      render: bash
+    validations:
+      required: false
+
+  - type: textarea
+    id: version
+    attributes:
+      label: "Android Version?"
+    validations:
+      required: true
+      
+  - type: input
+    id: buildsummary
+    attributes:
+      label: "Did you modify anything?"
+      placeholder: "Maybe"
+    validations:
+      required: true
