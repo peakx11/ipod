@@ -153,13 +153,17 @@ step_dependencies() {
     install_pkg "ninja" "Ninja Build System"
     install_pkg "pkg-config" "Pkg-Config"
     install_pkg "python" "Python 3"
+    install_pkg "python-pip" "Python Pip"
     install_pkg "glib" "GLib Library"
     install_pkg "libpixman" "Pixman Library"
+    install_pkg "libtasn1" "TASN1 Library"
+    install_pkg "libusb" "USB Library"
+    install_pkg "libgcrypt" "Gcrypt Library"
     install_pkg "zlib" "Zlib"
     install_pkg "sdl2" "SDL2 Video Library"
     install_pkg "openssl" "OpenSSL (for AES/SHA1)"
 
-    echo -e "  ${YELLOW}⏳${NC} Installing Python distlib..."
+    echo -e "  ${YELLOW}⏳${NC} Installing Python dependencies..."
     pip install distlib > /dev/null 2>&1
 }
 
