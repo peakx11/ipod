@@ -155,7 +155,7 @@ step_dependencies() {
     install_pkg "pkg-config" "Pkg-Config"
     install_pkg "python" "Python 3"
     install_pkg "glib" "GLib Library"
-    install_pkg "pixman" "Pixman Library"
+    install_pkg "libpixman" "Pixman Library"
     install_pkg "zlib" "Zlib"
     install_pkg "sdl2" "SDL2 Video Library"
     install_pkg "openssl" "OpenSSL (for AES/SHA1)"
