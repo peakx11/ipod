@@ -17,6 +17,14 @@ body:
     validations:
       required: false
 
+  - type: upload
+    id: screenshot
+    attributes:
+      label: Upload screenshot
+      description: If applicable, add screenshots to help explain your problem.
+    validations:
+      required: false
+
   - type: textarea
     id: version
     attributes:
