@@ -38,16 +38,13 @@ spinner() {
     local logfile=$3
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local i=0
-    
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
         printf "\r  ${YELLOW}⏳${NC} ${message} ${CYAN}${spin:$i:1}${NC}  "
         sleep 0.1
     done
-    
     wait $pid
     local exit_code=$?
-    
     if [ $exit_code -eq 0 ]; then
         printf "\r  ${GREEN}✓${NC} ${message}                    \n"
     else
@@ -57,7 +54,7 @@ spinner() {
             tail -n 20 "$logfile"
             echo -e "${RED}============================================${NC}\n"
         fi
-        echo -e "${RED}Script aborted due to error in step ${CURRENT_STEP}. Please fix the issue and run again.${NC}"
+        echo -e "${RED}Script aborted due to error in step ${CURRENT_STEP}.${NC}"
         exit 1
     fi
     return $exit_code
@@ -78,7 +75,7 @@ show_banner() {
     cat << 'BANNER'
     ╔══════════════════════════════════════╗
     ║                                      ║
-    ║   🍏  QEMU-iOS INSTALLER v2.0  🍏    ║
+    ║   🍏  QEMU-iOS INSTALLER v2.1  🍏    ║
     ║                                      ║
     ║        Powered by Termux-X11         ║
     ║                                      ║
@@ -108,13 +105,10 @@ detect_device() {
     elif [ "$USER_CORES" -gt "$MAX_CORES" ]; then
         echo -e "  ${YELLOW}⚠️ Warning: Requested ${USER_CORES} cores but only ${MAX_CORES} available. Capping at ${MAX_CORES}.${NC}"
         CPU_CORES=$MAX_CORES
-    elif [ "$USER_CORES" -le 0 ]; then
-        echo -e "  ${RED}✗ Invalid input. Using default: ${MAX_CORES}${NC}"
-        CPU_CORES=$MAX_CORES
     else
         CPU_CORES=$USER_CORES
     fi
-    echo -e "  ${GREEN}✓${NC} Proceeding with ${WHITE}${CPU_CORES}${NC} cores for compilation."
+    echo -e "  ${GREEN}✓${NC} Proceeding with ${WHITE}${CPU_CORES}${NC} cores."
     echo ""
     sleep 1
 }
@@ -169,17 +163,18 @@ step_dependencies() {
 
 step_clone() {
     update_progress
-    echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Fetching QEMU-iOS Source...${NC}"
+    echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Checking QEMU-iOS Source...${NC}"
     echo ""
     cd ~
     if [ -d "qemu-ios" ]; then
-        echo -e "  ${YELLOW}⚠️${NC} Existing qemu-ios directory found. Backing it up..."
-        mv qemu-ios qemu-ios_backup_$(date +%s)
+        echo -e "  ${GREEN}✓${NC} Existing qemu-ios directory found. Skipping clone."
+        echo ""
+    else
+        local tmplog=$(mktemp)
+        (git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git > "$tmplog" 2>&1) &
+        spinner $! "Cloning devos50/qemu-ios (ipod_touch_2g branch)..." "$tmplog"
+        rm -f "$tmplog"
     fi
-    local tmplog=$(mktemp)
-    (git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git > "$tmplog" 2>&1) &
-    spinner $! "Cloning devos50/qemu-ios (ipod_touch_2g branch)..." "$tmplog"
-    rm -f "$tmplog"
 }
 
 step_configure() {
@@ -187,6 +182,10 @@ step_configure() {
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Configuring Build Environment...${NC}"
     echo ""
     cd ~/qemu-ios
+    
+    echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
+    rm -rf build
+    
     mkdir -p build
     cd build
     (../configure \
@@ -207,14 +206,11 @@ step_build() {
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Compiling QEMU-iOS (This takes a while)...${NC}"
     echo ""
     cd ~/qemu-ios/build
-    echo -e "  ${GRAY}💡 Tip: You can open a new Termux session and type 'tail -f ~/qemu-ios/build/build.log' to monitor.${NC}"
+    echo -e "  ${GRAY}💡 Tip: You can monitor progress with 'tail -f ~/qemu-ios/build/build.log' in another tab.${NC}"
     (make -j${CPU_CORES} > build.log 2>&1) &
     spinner $! "Compiling with ${CPU_CORES} cores..." "build.log"
     if [ ! -f "arm-softmmu/qemu-system-arm" ]; then
         echo -e "  ${RED}✗${NC} Compilation may have failed. Executable not found."
-        echo -e "\n${RED}================ ERROR LOG =================${NC}"
-        tail -n 20 build.log
-        echo -e "${RED}============================================${NC}\n"
         exit 1
     fi
 }
@@ -225,11 +221,11 @@ step_directories_and_files() {
     echo ""
     mkdir -p ~/ios-workspace/roms
     local tmplog=$(mktemp)
-    (wget "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/bootrom_240_4" -O ~/ios-workspace/roms/bootrom_240_4 > "$tmplog" 2>&1) &
+    (wget -c "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/bootrom_240_4" -O ~/ios-workspace/roms/bootrom_240_4 > "$tmplog" 2>&1) &
     spinner $! "Downloading BootROM..." "$tmplog"
-    (wget "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nor_n72ap.bin" -O ~/ios-workspace/roms/nor_n72ap.bin > "$tmplog" 2>&1) &
+    (wget -c "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nor_n72ap.bin" -O ~/ios-workspace/roms/nor_n72ap.bin > "$tmplog" 2>&1) &
     spinner $! "Downloading NOR image..." "$tmplog"
-    (wget "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip" -O ~/ios-workspace/nand_n72ap.zip > "$tmplog" 2>&1) &
+    (wget -c "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip" -O ~/ios-workspace/nand_n72ap.zip > "$tmplog" 2>&1) &
     spinner $! "Downloading NAND zip file..." "$tmplog"
     (unzip -o -q ~/ios-workspace/nand_n72ap.zip -d ~/ios-workspace/ && rm ~/ios-workspace/nand_n72ap.zip >> "$tmplog" 2>&1) &
     spinner $! "Extracting NAND file system..." "$tmplog"
@@ -242,41 +238,15 @@ step_launchers() {
     echo ""
     cat > ~/start-ios.sh << 'LAUNCHEREOF'
 #!/data/data/com.termux/files/usr/bin/bash
-echo ""
-echo "🍏 Starting iOS Emulator Environment..."
-echo ""
 pkill -9 -f "termux.x11" 2>/dev/null
 pkill -9 -f "openbox" 2>/dev/null
-echo "📺 Starting X11 display server..."
 termux-x11 :0 -ac &
 sleep 2
 export DISPLAY=:0
-echo "🖥️ Launching Window Manager..."
 openbox-session &
 sleep 1
 cd ~/ios-workspace
-xterm -fa 'Monospace' -fs 10 -geometry 80x24 -title "QEMU-iOS Launcher" -e "
-echo '===================================='
-echo '       🍏 QEMU-iOS TERMINAL 🍏      '
-echo '===================================='
-echo 'Launching the iPod Touch 2G Emulator...'
-echo ''
-echo 'Command:'
-echo '~/qemu-ios/build/arm-softmmu/qemu-system-arm \\'
-echo '  -M iPod-Touch,bootrom=roms/bootrom_240_4,nand=nand,nor=roms/nor_n72ap.bin \\'
-echo '  -serial mon:stdio -cpu max -m 2G -d unimp'
-echo '===================================='
-echo ''
-~/qemu-ios/build/arm-softmmu/qemu-system-arm -M iPod-Touch,bootrom=roms/bootrom_240_4,nand=nand,nor=roms/nor_n72ap.bin -serial mon:stdio -cpu max -m 2G -d unimp
-echo ''
-echo '[Emulator closed. Press enter to exit...]'
-read
-" &
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  📱 Open the Termux-X11 app to view!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+xterm -fa 'Monospace' -fs 10 -geometry 80x24 -title "QEMU-iOS" -e "~/qemu-ios/build/arm-softmmu/qemu-system-arm -M iPod-Touch,bootrom=roms/bootrom_240_4,nand=nand,nor=roms/nor_n72ap.bin -serial mon:stdio -cpu max -m 2G -d unimp; read" &
 LAUNCHEREOF
     chmod +x ~/start-ios.sh
     echo -e "  ${GREEN}✓${NC} Created ~/start-ios.sh"
@@ -291,33 +261,13 @@ step_enjoy() {
 }
 
 show_completion() {
-    echo ""
-    echo -e "${GREEN}"
-    cat << 'COMPLETE'
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║         ✅  QEMU-iOS BUILD COMPLETE!  ✅                      ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
-COMPLETE
-    echo -e "${NC}"
-    echo -e "${WHITE}📱 Your emulator is built and files are staged!${NC}"
-    echo ""
-    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "${WHITE}🚀 TO START THE GUI ENVIROMENT:${NC}"
-    echo -e "   ${GREEN}bash ~/start-ios.sh${NC}"
-    echo ""
+    echo -e "${GREEN}✅ QEMU-iOS BUILD COMPLETE!${NC}"
+    echo -e "${WHITE}Run it with: ${GREEN}bash ~/start-ios.sh${NC}"
 }
 
 main() {
     show_banner
-    echo -e "${WHITE}  This script compiles devos50/qemu-ios (ipod_touch_2g branch)${NC}"
-    echo -e "${WHITE}  and downloads the required ROMs automatically.${NC}"
-    echo ""
-    echo -e "${GRAY}  Estimated time: 10-45 minutes (depending on CPU speed)${NC}"
-    echo ""
-    echo -e "${YELLOW}  Press Enter to start installation, or Ctrl+C to cancel...${NC}"
+    echo -e "${YELLOW}Press Enter to start, or Ctrl+C to cancel...${NC}"
     read
     detect_device
     step_update
