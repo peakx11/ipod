@@ -1,0 +1,9 @@
+name: Question
+description: ask anything!
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: What is your question?
+    validations:
+      required: true
