@@ -158,6 +158,9 @@ step_dependencies() {
     install_pkg "zlib" "Zlib"
     install_pkg "sdl2" "SDL2 Video Library"
     install_pkg "openssl" "OpenSSL (for AES/SHA1)"
+
+    echo -e "  ${YELLOW}⏳${NC} Installing Python distlib..."
+    pip install distlib > /dev/null 2>&1
 }
 
 step_clone() {
