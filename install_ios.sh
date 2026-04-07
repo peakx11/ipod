@@ -286,6 +286,7 @@ step_configure() {
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
     sed -i 's/pr_manager_execute/termux_pr_mgr_stub/g' block/file-posix.c
+    sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif' hw/scsi/scsi-disk.c
 
     cat << 'EOF' > fix_header.h
 #include <errno.h>
@@ -311,6 +312,8 @@ EOF
         --disable-slirp \
         --disable-werror \
         --enable-pie \
+        --disable-scsi \
+        --disable-linux-aio \
         --disable-vhost-user \
         --disable-linux-aio \
         --extra-cflags='-I$PREFIX/include -I$PREFIX/include/X11 -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration' \
