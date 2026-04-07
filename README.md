@@ -11,6 +11,9 @@ An automated toolchain and installer to build and run the **devos50/qemu-ios** e
 > [!WARNING]
 > If you encounter any **issues**. Report them [here](https://github.com/peakx11/ipod/issues)
 
+> [!IMPORTANT]
+> THIS IS STILL IN DEVELOPMENT, DONT EXPECT THIS TO WORK RIGHT AWAY.
+
 ---
 
 ![Screenshot](docs/images/screenshot.png)
