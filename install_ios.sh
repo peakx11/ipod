@@ -19,16 +19,16 @@ NC='\033[0m'
 
 cleanup() {
     echo -e "\n\n${RED}⚠️ Build Failed.${NC}"
-    echo -e "${YELLOW}--- LAST 10 LINES OF LOG ---${NC}"
-    tail -n 10 "$LOG_FILE"
-    echo -e "${YELLOW}---------------------------${NC}"
+    echo -e "${YELLOW}--- DIAGNOSTIC ERROR ---${NC}"
+    grep -B 3 -A 1 "error:" "$LOG_FILE" | tail -n 10
+    echo -e "${YELLOW}------------------------${NC}"
     pkill -P $$ 2>/dev/null
     exit 1
 }
 trap cleanup SIGINT SIGTERM ERR
 
 initialize_log() {
-    echo "=== QEMU-iOS Build Log v3.2 ===" > "$LOG_FILE"
+    echo "=== QEMU-iOS Build Log v3.3 ===" > "$LOG_FILE"
     echo "Started at $(date)" >> "$LOG_FILE"
 }
 
@@ -53,7 +53,7 @@ spinner() {
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
         if [ $((tick % 10)) -eq 0 ] && [ -f "$LOG_FILE" ]; then
-            progress=$(tail -n 10 "$LOG_FILE" 2>/dev/null | grep -o "\[[0-9]*/[0-9]*\]" | tail -n 1)
+            progress=$(tail -n 15 "$LOG_FILE" 2>/dev/null | grep -o "\[[0-9]*/[0-9]*\]" | tail -n 1)
         fi
         tick=$((tick + 1))
         printf "\r  ${YELLOW}⏳${NC} ${WHITE}${progress:-....}${NC} ${message} ${CYAN}${spin:$i:1}${NC}   "
@@ -77,7 +77,7 @@ install_pkg() {
 show_banner() {
     clear
     echo -e "${CYAN}╔══════════════════════════════════════════════╗"
-    echo -e "║      🍏 QEMU-iOS TERMUX BUILDER v3.2 🍏      ║"
+    echo -e "║      🍏 QEMU-iOS TERMUX BUILDER v3.3 🍏      ║"
     echo -e "╚══════════════════════════════════════════════╝${NC}\n"
 }
 
@@ -115,21 +115,23 @@ step_configure() {
     update_progress
     cd "$REPO_DIR"
     git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
+    
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
+    
+    sed -i 's/pr_manager_execute/termux_pr_mgr_stub/g' block/file-posix.c
     
     cat << 'EOF' > fix_header.h
 #include <errno.h>
 #include <sys/syscall.h>
-#define get_sysfs_str_val(...) (-1)
-#define get_sysfs_long_val(...) (-1)
-#define copy_file_range(...) (errno = 38, -1)
-#define pr_manager_execute_stub(...) (-1)
+static inline int get_sysfs_str_val(void* a, const char* b, char** c) { return -1; }
+static inline long get_sysfs_long_val(void* a, const char* b) { return -1; }
+static inline int copy_file_range(int a, void* b, int c, void* d, size_t e, unsigned int f) { errno = ENOSYS; return -1; }
+static inline int termux_pr_mgr_stub(void* a, void* b, void* c, void* d, void* e, void* f) { return -1; }
 EOF
 
     cat fix_header.h block/file-posix.c > block/file-posix.c.new
     mv block/file-posix.c.new block/file-posix.c
     rm fix_header.h
-    sed -i 's/pr_manager_execute/pr_manager_execute_stub/g' block/file-posix.c
     
     mkdir -p build && cd build
     (
@@ -138,7 +140,7 @@ EOF
         --target-list=arm-softmmu --disable-capstone \
         --disable-slirp --disable-werror --enable-pie \
         --disable-vhost-user \
-        --extra-cflags="-I$PREFIX/include -I$PREFIX/include/X11" \
+        --extra-cflags="-I$PREFIX/include -I$PREFIX/include/X11 -Wno-implicit-function-declaration" \
         --extra-ldflags="-L$PREFIX/lib -lX11" >> "$LOG_FILE" 2>&1
     ) &
     spinner $! "Configuring Build"
