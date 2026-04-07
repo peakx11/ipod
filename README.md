@@ -6,6 +6,8 @@
 
 An automated toolchain and installer to build and run the **devos50/qemu-ios** emulator (iPod Touch 2G / S5L8720) directly on Android. This project leverages **Termux-X11** for hardware-accelerated display and **Openbox** for window management.
 
+---
+
 > [!WARNING]
 > If you encounter any **issues**. Report them [here](https://github.com/peakx11/ipod/issues)
 
@@ -81,7 +83,6 @@ After installation, your home directory will contain:
 ## 🛠️ Troubleshooting
 1. Compilation Failed (Step 6)
 This is usually caused by the Android Phantom Process Killer or running out of RAM.
- * Fix: Edit install_ios.sh and change make -j$(nproc) to make -j2 to reduce memory pressure.
  * Fix: Disable "Child Process Restrictions" in your Android Developer Options.
 2. Display Not Found
 Ensure the Termux-X11 app is running in the background before you launch start-ios.sh.
