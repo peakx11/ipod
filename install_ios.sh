@@ -40,7 +40,18 @@ spinner() {
     local i=0
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
-        printf "\r  ${YELLOW}⏳${NC} ${message} ${CYAN}${spin:$i:1}${NC}  "
+        
+        local progress=""
+        if [ -f "$logfile" ]; then
+            progress=$(tail -n 20 "$logfile" | grep -o "\[[0-9]*\/[0-9]*\]" | tail -n 1)
+        fi
+
+        if [ -n "$progress" ]; then
+            printf "\r  ${YELLOW}⏳${NC} ${WHITE}${progress}${NC} ${message} ${CYAN}${spin:$i:1}${NC}  "
+        else
+            printf "\r  ${YELLOW}⏳${NC} ${message} ${CYAN}${spin:$i:1}${NC}  "
+        fi
+        
         sleep 0.1
     done
     wait $pid
@@ -54,10 +65,8 @@ spinner() {
             tail -n 20 "$logfile"
             echo -e "${RED}============================================${NC}\n"
         fi
-        echo -e "${RED}Script aborted due to error in step ${CURRENT_STEP}.${NC}"
         exit 1
     fi
-    return $exit_code
 }
 
 install_pkg() {
@@ -183,19 +192,16 @@ step_configure() {
     echo ""
     cd ~/qemu-ios
     
-    echo -e "  ${YELLOW}🔧${NC} Applying Compatibility Shims..."
+    echo -e "  ${YELLOW}🔧${NC} Applying Termux compatibility patches..."
     
+    git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
+
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
-    sed -i 's/syscall(__NR_gettid)/gettid()/g' util/oslib-posix.c
-
-    sed -i 's|#include <qemu/osdep.h>|#include <qemu/osdep.h>\n#include <errno.h>\n#define copy_file_range(...) (errno = ENOSYS, -1)|' block/file-posix.c
-
-    sed -i 's/defined(CONFIG_BLKZONED)/0/g' block/file-posix.c
-    sed -i 's/ifdef CONFIG_BLKZONED/if 0/g' block/file-posix.c
+    
+    sed -i '1i #include <errno.h>\n#define copy_file_range(...) (errno = ENOSYS, -1)\n#define CONFIG_BLKZONED 0' block/file-posix.c
     
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
-    
     mkdir -p build
     cd build
     (../configure \
@@ -208,7 +214,7 @@ step_configure() {
         --enable-pie \
         --extra-cflags="-I$PREFIX/include -I$PREFIX/include/openssl" \
         --extra-ldflags="-L$PREFIX/lib -lcrypto" > configure.log 2>&1) &
-    spinner $! "Running ./configure for ARM-softmmu..." "configure.log"
+    spinner $! "Running ./configure..." "configure.log"
 }
 
 step_build() {
@@ -216,9 +222,11 @@ step_build() {
     echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Compiling QEMU-iOS (This takes a while)...${NC}"
     echo ""
     cd ~/qemu-ios/build
-    echo -e "  ${GRAY}💡 Tip: You can monitor progress with 'tail -f ~/qemu-ios/build/build.log' in another tab.${NC}"
+    echo -e "  ${GRAY}💡 Tip: Progress will appear in the spinner below.${NC}"
+    
     (make -j${CPU_CORES} > build.log 2>&1) &
     spinner $! "Compiling with ${CPU_CORES} cores..." "build.log"
+    
     if [ ! -f "arm-softmmu/qemu-system-arm" ]; then
         echo -e "  ${RED}✗${NC} Compilation may have failed. Executable not found."
         exit 1
