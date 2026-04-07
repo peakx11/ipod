@@ -186,7 +186,7 @@ step_configure() {
     
     echo -e "  ${YELLOW}🔧${NC} Applying surgical Termux patches..."
     
-    git checkout block/file-posix.c util/oslib-posix.c hw/scsi/scsi-disk.c hw/scsi/scsi-generic.c 2>/dev/null
+    git checkout block/file-posix.c util/oslib-posix.c hw/scsi/scsi-disk.c hw/scsi/scsi-generic.c migration/postcopy-ram.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
 
@@ -200,6 +200,8 @@ step_configure() {
     sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif' hw/scsi/scsi-disk.c
     sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif\n#ifndef SG_ERR_DRIVER_SENSE\n#define SG_ERR_DRIVER_SENSE 0x08\n#endif' hw/scsi/scsi-generic.c
     
+    sed -i '1i #define uffd_open(...) (-1)' migration/postcopy-ram.c
+
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
     mkdir -p build
