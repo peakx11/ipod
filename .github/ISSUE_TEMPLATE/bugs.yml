@@ -8,8 +8,6 @@ body:
       label: "Describe the bug here."
     validations:
       required: true
-      
-        --- 
   
   - type: textarea
     id: terminal
