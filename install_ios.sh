@@ -244,21 +244,20 @@ step_clone() {
 
     cd "$HOME"
 
-    if [ -d "$REPO_DIR/.git" ]; then
+    if [ -d "$REPO_DIR" ]; then
         if [ "$FAST_MODE" -eq 1 ]; then
-            echo "[INFO] Existing repo detected → skipping clone"
+            echo "[INFO] Found existing qemu-ios → skipping clone"
             return
         fi
 
-        echo -e "  ${YELLOW}⚠️ Existing qemu-ios repository detected.${NC}"
+        echo -e "  ${YELLOW}⚠️ Directory 'qemu-ios' already exists.${NC}"
         echo -e "  ${CYAN}[1] Use existing (skip)${NC}"
-        echo -e "  ${CYAN}[2] Update (git pull)${NC}"
-        echo -e "  ${CYAN}[3] Re-clone (delete and fresh clone)${NC}"
+        echo -e "  ${CYAN}[2] Re-clone (delete and fresh clone)${NC}"
         echo ""
 
         while true; do
-            echo -ne "  ${YELLOW}Select option [1-3]: ${NC}"
-            read CHOICE
+            echo -ne "  ${YELLOW}Select option [1-2]: ${NC}"
+            read CHOICE < /dev/tty
 
             case "$CHOICE" in
                 1)
@@ -266,11 +265,6 @@ step_clone() {
                     return
                     ;;
                 2)
-                    cd "$REPO_DIR"
-                    run_cmd "git pull" "Updating repository..."
-                    return
-                    ;;
-                3)
                     rm -rf "$REPO_DIR"
                     break
                     ;;
