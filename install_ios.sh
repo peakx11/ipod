@@ -38,12 +38,10 @@ spinner() {
     local i=0
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
-        
         local progress=""
         if [ -f "$logfile" ]; then
             progress=$(tail -n 20 "$logfile" 2>/dev/null | grep -o "\[[0-9]*/[0-9]*\]" | tail -n 1)
         fi
-
         if [ -n "$progress" ]; then
             printf "\r  ${YELLOW}⏳${NC} ${WHITE}${progress}${NC} ${message} ${CYAN}${spin:$i:1}${NC}  "
         else
@@ -76,7 +74,7 @@ show_banner() {
     cat << 'BANNER'
     ╔══════════════════════════════════════╗
     ║                                      ║
-    ║   🍏  QEMU-iOS INSTALLER v2.1  🍏    ║
+    ║   🍏  QEMU-iOS INSTALLER v2.2  🍏    ║
     ║                                      ║
     ║        Powered by Termux-X11         ║
     ║                                      ║
@@ -156,6 +154,8 @@ step_dependencies() {
     install_pkg "libgcrypt" "Gcrypt Library"
     install_pkg "zlib" "Zlib"
     install_pkg "sdl2" "SDL2 Video Library"
+    install_pkg "libx11" "X11 Library"
+    install_pkg "xorgproto" "XOrg Protocol Headers"
     install_pkg "openssl" "OpenSSL (for AES/SHA1)"
 
     echo -e "  ${YELLOW}⏳${NC} Installing Python dependencies..."
@@ -214,8 +214,8 @@ step_configure() {
         --disable-slirp \
         --disable-werror \
         --enable-pie \
-        --extra-cflags="-I$PREFIX/include -I$PREFIX/include/openssl" \
-        --extra-ldflags="-L$PREFIX/lib -lcrypto" > configure.log 2>&1) &
+        --extra-cflags="-I$PREFIX/include -I$PREFIX/include/openssl -I$PREFIX/include/X11" \
+        --extra-ldflags="-L$PREFIX/lib -lcrypto -lX11" > configure.log 2>&1) &
     spinner $! "Running ./configure..." "configure.log"
 }
 
