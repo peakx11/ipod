@@ -6,6 +6,9 @@
 
 An automated toolchain and installer to build and run the **devos50/qemu-ios** emulator (iPod Touch 2G / S5L8720) directly on Android. This project leverages **Termux-X11** for hardware-accelerated display and **Openbox** for window management.
 
+> [!WARNING]
+> If you encounter any **issues**. Report them [here](https://github.com/peakx11/ipod/issues)
+
 ---
 
 ![Screenshot](docs/images/screenshot.png)
