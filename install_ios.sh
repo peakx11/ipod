@@ -183,12 +183,16 @@ step_configure() {
     echo ""
     cd ~/qemu-ios
     
-    echo -e "  ${YELLOW}🔧${NC} Patching Source for Termux Compatibility..."
+    echo -e "  ${YELLOW}🔧${NC} Applying Heavy-Duty Termux Patches..."
     
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
     sed -i 's/syscall(__NR_gettid)/gettid()/g' util/oslib-posix.c
+
     sed -i 's/defined(CONFIG_COPY_FILE_RANGE)/0/g' block/file-posix.c
+    sed -i 's/ifdef CONFIG_COPY_FILE_RANGE/if 0/g' block/file-posix.c
+    
     sed -i 's/defined(CONFIG_BLKZONED)/0/g' block/file-posix.c
+    sed -i 's/ifdef CONFIG_BLKZONED/if 0/g' block/file-posix.c
     
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
