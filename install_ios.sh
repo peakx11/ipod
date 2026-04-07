@@ -241,11 +241,47 @@ step_dependencies() {
 
 step_clone() {
     plain_step "Fetching QEMU-iOS source..."
+
     cd "$HOME"
-    if [ -d "$REPO_DIR" ]; then
-        mv "$REPO_DIR" "${REPO_DIR}_backup_$(date +%s)"
+
+    if [ -d "$REPO_DIR/.git" ]; then
+        if [ "$FAST_MODE" -eq 1 ]; then
+            echo "[INFO] Existing repo detected → skipping clone"
+            return
+        fi
+
+        echo -e "  ${YELLOW}⚠️ Existing qemu-ios repository detected.${NC}"
+        echo -e "  ${CYAN}[1] Use existing (skip)${NC}"
+        echo -e "  ${CYAN}[2] Update (git pull)${NC}"
+        echo -e "  ${CYAN}[3] Re-clone (delete and fresh clone)${NC}"
+        echo ""
+
+        while true; do
+            echo -ne "  ${YELLOW}Select option [1-3]: ${NC}"
+            read CHOICE
+
+            case "$CHOICE" in
+                1)
+                    echo -e "  ${GREEN}✓ Using existing source${NC}"
+                    return
+                    ;;
+                2)
+                    cd "$REPO_DIR"
+                    run_cmd "git pull" "Updating repository..."
+                    return
+                    ;;
+                3)
+                    rm -rf "$REPO_DIR"
+                    break
+                    ;;
+                *)
+                    echo -e "  ${RED}Invalid option${NC}"
+                    ;;
+            esac
+        done
     fi
-    run_cmd "git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git '$REPO_DIR'" "Cloning devos50/qemu-ios (ipod_touch_2g branch)..."
+
+    run_cmd "git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git '$REPO_DIR'" "Cloning devos50/qemu-ios..."
 }
 
 step_configure() {
@@ -366,5 +402,4 @@ main() {
     step_launchers
     show_completion
 }
-
 main
