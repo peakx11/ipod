@@ -40,10 +40,9 @@ spinner() {
     local i=0
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
-        
         local progress=""
         if [ -f "$logfile" ]; then
-            progress=$(tail -n 20 "$logfile" | grep -o "\[[0-9]*\/[0-9]*\]" | tail -n 1)
+            progress=$(tail -n 20 "$logfile" 2>/dev/null | grep -o "\[[0-9]*/[0-9]*\]" | tail -n 1)
         fi
 
         if [ -n "$progress" ]; then
