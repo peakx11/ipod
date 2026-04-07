@@ -188,7 +188,7 @@ step_configure() {
     
     echo -e "  ${YELLOW}🔧${NC} Applying surgical Termux patches..."
     
-    git checkout block/file-posix.c util/oslib-posix.c hw/scsi/scsi-disk.c hw/scsi/scsi-generic.c migration/postcopy-ram.c 2>/dev/null
+    git checkout block/file-posix.c util/oslib-posix.c hw/scsi/scsi-disk.c hw/scsi/scsi-generic.c migration/ram.c migration/postcopy-ram.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
 
@@ -202,7 +202,68 @@ step_configure() {
     sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif' hw/scsi/scsi-disk.c
     sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif\n#ifndef SG_ERR_DRIVER_SENSE\n#define SG_ERR_DRIVER_SENSE 0x08\n#endif' hw/scsi/scsi-generic.c
     
-    sed -i '1i #define uffd_open(...) (-1)' migration/postcopy-ram.c
+    cat << 'EOF' > migration/uffd-stub.h
+#ifndef UFFD_STUB_H
+#define UFFD_STUB_H
+#include <stdint.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+
+#define _LINUX_USERFAULTFD_H
+#define _UAPI_LINUX_USERFAULTFD_H
+
+struct uffd_msg {
+    uint64_t event;
+    union {
+        struct {
+            uint64_t flags;
+            uint64_t address;
+            union { uint32_t ptid; } feat;
+        } pagefault;
+    } arg;
+};
+
+struct uffdio_api { uint64_t api; uint64_t features; uint64_t ioctls; };
+struct uffdio_range { uint64_t start; uint64_t len; };
+struct uffdio_register { struct uffdio_range range; uint64_t mode; uint64_t ioctls; };
+struct uffdio_copy { uint64_t dst; uint64_t src; uint64_t len; uint64_t mode; int64_t copy; };
+struct uffdio_zeropage { struct uffdio_range range; uint64_t mode; int64_t zeropage; };
+
+#define UFFD_API 0xAA
+#define UFFDIO_API      _IOWR(0xAA, 0x3F, struct uffdio_api)
+#define UFFDIO_REGISTER _IOWR(0xAA, 0x00, struct uffdio_register)
+#define UFFDIO_UNREGISTER _IOWR(0xAA, 0x01, struct uffdio_range)
+#define UFFDIO_WAKE     _IOWR(0xAA, 0x02, struct uffdio_range)
+#define UFFDIO_COPY     _IOWR(0xAA, 0x03, struct uffdio_copy)
+#define UFFDIO_ZEROPAGE _IOWR(0xAA, 0x04, struct uffdio_zeropage)
+
+#define UFFD_EVENT_PAGEFAULT 0x12
+#define UFFDIO_REGISTER_MODE_MISSING 0x01
+#define UFFDIO_REGISTER_MODE_WP 0x02
+#define UFFD_FEATURE_PAGEFAULT_FLAG_WP 0
+
+#define _UFFDIO_REGISTER 0
+#define _UFFDIO_UNREGISTER 0
+#define _UFFDIO_WAKE 0
+#define _UFFDIO_COPY 0
+#define _UFFDIO_ZEROPAGE 0
+#define _UFFDIO_WRITEPROTECT 0
+#define BIT(nr) (1UL << (nr))
+
+static inline int uffd_open(int flags) { return -1; }
+static inline int uffd_read_events(int fd, struct uffd_msg *msg, int n) { return -1; }
+static inline int uffd_change_protection(int fd, void *a, uint64_t l, int m, int j) { return -1; }
+static inline int uffd_query_features(uint64_t *f) { return -1; }
+static inline int uffd_create_fd(uint64_t f, int n) { return -1; }
+static inline int uffd_register_memory(int fd, void *a, uint64_t l, uint64_t m, uint64_t *i) { return -1; }
+static inline int uffd_unregister_memory(int fd, void *a, uint64_t l) { return -1; }
+static inline void uffd_close_fd(int fd) { }
+
+#endif
+EOF
+
+    sed -i '1i #include "uffd-stub.h"' migration/ram.c
+    sed -i '1i #include "uffd-stub.h"' migration/postcopy-ram.c
 
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
