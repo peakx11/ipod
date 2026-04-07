@@ -1,5 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+# ==============================================================================
+# QEMU-iOS TERMUX INSTALLER - v0.5
+# ==============================================================================
+
 TOTAL_STEPS=11
 CURRENT_STEP=0
 CPU_CORES=4 
@@ -92,7 +96,7 @@ show_banner() {
     cat << 'BANNER'
     ╔══════════════════════════════════════════════╗
     ║                                              ║
-    ║      🍏 QEMU-iOS TERMUX BUILDER v3.0 🍏      ║
+    ║    🍏    QEMU-iOS TERMUX BUILDER      🍏     ║
     ║                                              ║
     ║    Robust, Automated, & Termux-Optimized     ║
     ║                                              ║
@@ -173,10 +177,9 @@ step_configure() {
     git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
+
+    sed -i 's/#include "qemu\/osdep.h"/#include "qemu\/osdep.h"\n#include <errno.h>\n#define get_sysfs_str_val(...) (-1)\n#define get_sysfs_long_val(...) (-1)\n#define copy_file_range(...) (errno = 38, -1)\n#define pr_manager_execute_stub(...) (-1)/g' block/file-posix.c
     
-    sed -i '1i #include <errno.h>\n#define copy_file_range(...) (errno = 38, -1)' block/file-posix.c
-    sed -i '1i #define get_sysfs_str_val(...) (-1)\n#define get_sysfs_long_val(...) (-1)' block/file-posix.c
-    sed -i '1i #define pr_manager_execute(...) (-1)' block/file-posix.c
     sed -i 's/pr_manager_execute/pr_manager_execute_stub/g' block/file-posix.c
     
     echo -e "  ${GREEN}✓ Patches applied successfully.${NC}"
