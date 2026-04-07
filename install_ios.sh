@@ -1,5 +1,3 @@
-#!/data/data/com.termux/files/usr/bin/bash
-
 TOTAL_STEPS=10
 CURRENT_STEP=0
 CPU_CORES=4 
@@ -59,20 +57,6 @@ spinner() {
         printf "\r  ${GREEN}✓${NC} ${message}                    \n"
     else
         printf "\r  ${RED}✗${NC} ${message} ${RED}(failed)${NC}     \n"
-        exit 1
-    fi
-}
-
-step_build() {
-    update_progress
-    echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Compiling QEMU-iOS (This takes a while)...${NC}"
-    echo ""
-    cd ~/qemu-ios/build
-    (make -j${CPU_CORES} > build.log 2>&1) &
-    spinner $! "Compiling with ${CPU_CORES} cores..." "build.log"
-    
-    if [ ! -f "arm-softmmu/qemu-system-arm" ]; then
-        echo -e "  ${RED}✗${NC} Compilation may have failed. Executable not found."
         exit 1
     fi
 }
@@ -202,7 +186,7 @@ step_configure() {
     
     echo -e "  ${YELLOW}🔧${NC} Applying surgical Termux patches..."
     
-    git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
+    git checkout block/file-posix.c util/oslib-posix.c hw/scsi/scsi-disk.c hw/scsi/scsi-generic.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
 
@@ -212,6 +196,9 @@ step_configure() {
     sed -i 's/defined(CONFIG_COPY_FILE_RANGE)/0/g' block/file-posix.c
     
     sed -i '1i #include <errno.h>\n#define copy_file_range(...) (errno = 38, -1)' block/file-posix.c
+
+    sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif' hw/scsi/scsi-disk.c
+    sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif\n#ifndef SG_ERR_DRIVER_SENSE\n#define SG_ERR_DRIVER_SENSE 0x08\n#endif' hw/scsi/scsi-generic.c
     
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
