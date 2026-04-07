@@ -74,7 +74,7 @@ show_banner() {
     cat << 'BANNER'
     ╔══════════════════════════════════════╗
     ║                                      ║
-    ║   🍏  QEMU-iOS INSTALLER v2.2  🍏    ║
+    ║   🍏  QEMU-iOS INSTALLER v2.3  🍏    ║
     ║                                      ║
     ║        Powered by Termux-X11         ║
     ║                                      ║
@@ -157,6 +157,8 @@ step_dependencies() {
     install_pkg "libx11" "X11 Library"
     install_pkg "xorgproto" "XOrg Protocol Headers"
     install_pkg "openssl" "OpenSSL (for AES/SHA1)"
+    install_pkg "libglvnd" "OpenGL/EGL Headers"
+    install_pkg "libepoxy" "Epoxy Library"
 
     echo -e "  ${YELLOW}⏳${NC} Installing Python dependencies..."
     pip install distlib > /dev/null 2>&1
@@ -206,9 +208,11 @@ step_configure() {
     rm -rf build
     mkdir -p build
     cd build
+    
     (../configure \
         --enable-sdl \
         --disable-cocoa \
+        --disable-opengl \
         --target-list=arm-softmmu \
         --disable-capstone \
         --disable-slirp \
