@@ -1,11 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-TOTAL_STEPS=11
-CURRENT_STEP=0
-CPU_CORES=4
 LOG_FILE="$HOME/qemu-ios-install.log"
 WORKSPACE="$HOME/ios-workspace"
 REPO_DIR="$HOME/qemu-ios"
+
+CPU_CORES=4
+FAST_MODE=0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -15,100 +15,85 @@ WHITE='\033[1;37m'
 GRAY='\033[0;90m'
 NC='\033[0m'
 
-cleanup() {
-    echo -e "\n\n${RED}⚠️ Build Failed.${NC}"
-    echo -e "${YELLOW}--- DIAGNOSTIC ERROR ---${NC}"
-    grep -B 3 -A 1 "error:" "$LOG_FILE" | tail -n 10
-    echo -e "${YELLOW}------------------------${NC}"
-    pkill -P $$ 2>/dev/null
-    exit 1
-}
-trap cleanup SIGINT SIGTERM ERR
-
-initialize_log() {
-    echo "=== QEMU-iOS Build Log ===" > "$LOG_FILE"
-    echo "Started at $(date)" >> "$LOG_FILE"
+print_line() {
+    echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
-update_progress() {
-    CURRENT_STEP=$((CURRENT_STEP + 1))
-    PERCENT=$((CURRENT_STEP * 100 / TOTAL_STEPS))
-    BAR_SIZE=20
-    FILLED=$((PERCENT * BAR_SIZE / 100))
-    EMPTY=$((BAR_SIZE - FILLED))
-    BAR="${GREEN}$(printf '█%.0s' $(seq 1 $FILLED))${GRAY}$(printf '░%.0s' $(seq 1 $EMPTY))${NC}"
-    echo -e "\n${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  ${CURRENT_STEP}/${TOTAL_STEPS} ${BAR} ${PERCENT}%${NC}"
-    echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-}
-
-spinner() {
-    local pid=$1
-    local message=$2
-    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
-    while kill -0 $pid 2>/dev/null; do
-        i=$(( (i+1) % 10 ))
-        printf "\r  ${YELLOW}${spin:$i:1}${NC} ${message}   "
-        sleep 0.1
-    done
-    wait $pid
-    if [ $? -eq 0 ]; then
-        printf "\r  ${GREEN}✓${NC} ${message}        \n"
-    else
-        printf "\r  ${RED}✗${NC} ${message}        \n"
-        cleanup
-    fi
-}
-
-install_pkg() {
-    local pkg=$1
-    (yes | pkg install $pkg -y >> "$LOG_FILE" 2>&1) &
-    spinner $! "Installing $pkg"
-}
-
-show_banner() {
+print_header() {
     clear
-    echo -e "${CYAN}QEMU-iOS TERMUX BUILDER${NC}\n"
+    print_line
+    echo -e "${CYAN}        QEMU-iOS TERMUX BUILDER${NC}"
+    print_line
 }
 
-step_preflight() {
-    update_progress
-    MAX_CORES=$(nproc 2>/dev/null || echo "4")
-    echo -n "Cores [1-${MAX_CORES}, default ${MAX_CORES}]: "
-    read USER_CORES < /dev/tty
-    if [[ ! "$USER_CORES" =~ ^[0-9]+$ ]]; then
-        CPU_CORES=$MAX_CORES
+log() {
+    echo "$1" >> "$LOG_FILE"
+}
+
+run_cmd() {
+    if [ "$FAST_MODE" -eq 1 ]; then
+        eval "$1" >> "$LOG_FILE" 2>&1
     else
-        CPU_CORES=$USER_CORES
+        eval "$1" >> "$LOG_FILE" 2>&1 &
+        pid=$!
+        spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+        i=0
+        while kill -0 $pid 2>/dev/null; do
+            i=$(( (i+1) % 10 ))
+            printf "\r${YELLOW}${spin:$i:1}${NC} ${2}   "
+            sleep 0.1
+        done
+        wait $pid
+        if [ $? -eq 0 ]; then
+            printf "\r${GREEN}✓${NC} ${2}            \n"
+        else
+            echo -e "\n${RED}Build Failed${NC}"
+            grep -B 2 -A 2 "error:" "$LOG_FILE" | tail -n 10
+            exit 1
+        fi
     fi
 }
 
-step_update() {
-    update_progress
-    (yes | pkg update -y >> "$LOG_FILE" 2>&1 && yes | pkg upgrade -y >> "$LOG_FILE" 2>&1) &
-    spinner $! "Updating"
+ask_cores() {
+    MAX_CORES=$(nproc 2>/dev/null || echo 4)
+    while true; do
+        echo -ne "${CYAN}Cores [1-${MAX_CORES}] (default ${MAX_CORES}): ${NC}"
+        read INPUT < /dev/tty
+        if [ -z "$INPUT" ]; then
+            CPU_CORES=$MAX_CORES
+            break
+        elif [[ "$INPUT" =~ ^[0-9]+$ ]] && [ "$INPUT" -ge 1 ] && [ "$INPUT" -le "$MAX_CORES" ]; then
+            CPU_CORES=$INPUT
+            break
+        else
+            echo -e "${RED}Invalid input${NC}"
+        fi
+    done
 }
 
-step_dependencies() {
-    update_progress
+ask_fast_mode() {
+    while true; do
+        echo -ne "${CYAN}Do u want to use fast mode? (Y/N): ${NC}"
+        read INPUT < /dev/tty
+        case "$INPUT" in
+            Y|y) FAST_MODE=1; break ;;
+            N|n) FAST_MODE=0; break ;;
+            *) echo -e "${RED}Enter Y or N${NC}" ;;
+        esac
+    done
+}
+
+install_deps() {
     deps=(x11-repo termux-x11-nightly openbox xterm wget unzip git clang make ninja pkg-config python glib libpixman libtasn1 libusb libgcrypt zlib sdl2 libx11 xorgproto openssl libglvnd libepoxy liblzo bzip2)
-    for pkg in "${deps[@]}"; do install_pkg "$pkg"; done
-    (pip install distlib >> "$LOG_FILE" 2>&1) &
-    spinner $! "Python deps"
+    for pkg in "${deps[@]}"; do
+        run_cmd "yes | pkg install $pkg -y" "Installing $pkg"
+    done
+    run_cmd "pip install distlib" "Python deps"
 }
 
-step_clone() {
-    update_progress
-    if [ ! -d "$REPO_DIR" ]; then
-        (git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git "$REPO_DIR" >> "$LOG_FILE" 2>&1) &
-        spinner $! "Cloning"
-    fi
-}
-
-step_configure() {
-    update_progress
+patch_qemu() {
     cd "$REPO_DIR"
+
     git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
@@ -125,60 +110,49 @@ static inline int termux_pr_mgr_stub(void* a, ...) { return -1; }
 EOF
 
     sed -i '1i #include "fix_header.h"' block/file-posix.c
-
-    mkdir -p build && cd build
-
-    (
-        ../configure \
-        --enable-sdl \
-        --disable-cocoa \
-        --disable-opengl \
-        --target-list=arm-softmmu \
-        --disable-capstone \
-        --disable-slirp \
-        --disable-werror \
-        --enable-pie \
-        --disable-vhost-user \
-        --disable-linux-aio \
-        --extra-cflags="-I$PREFIX/include -I$PREFIX/include/X11 -Wno-implicit-function-declaration" \
-        --extra-ldflags="-L$PREFIX/lib -lX11" >> "$LOG_FILE" 2>&1
-    ) &
-    spinner $! "Configuring"
 }
 
-step_build() {
-    update_progress
-    cd "$REPO_DIR/build"
-    rm -rf libblock.fa.p/block_file-posix.c.o
-    (make -j${CPU_CORES} >> "$LOG_FILE" 2>&1) &
-    spinner $! "Building"
+configure_build() {
+    mkdir -p build
+    cd build
+
+    run_cmd "../configure \
+    --enable-sdl \
+    --disable-cocoa \
+    --disable-opengl \
+    --target-list=arm-softmmu \
+    --disable-capstone \
+    --disable-slirp \
+    --disable-werror \
+    --enable-pie \
+    --disable-vhost-user \
+    --disable-linux-aio \
+    --extra-cflags='-I$PREFIX/include -I$PREFIX/include/X11 -Wno-implicit-function-declaration' \
+    --extra-ldflags='-L$PREFIX/lib -lX11'" "Configuring"
 }
 
-step_files() {
-    update_progress
+build_qemu() {
+    run_cmd "make -j$CPU_CORES" "Building"
+}
+
+download_files() {
     mkdir -p "$WORKSPACE/roms"
     cd "$WORKSPACE"
 
-    (wget -q -c "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/bootrom_240_4" -O roms/bootrom_240_4 >> "$LOG_FILE" 2>&1) &
-    spinner $! "BootROM"
-
-    (wget -q -c "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nor_n72ap.bin" -O roms/nor_n72ap.bin >> "$LOG_FILE" 2>&1) &
-    spinner $! "NOR"
+    run_cmd "wget -q -c https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/bootrom_240_4 -O roms/bootrom_240_4" "BootROM"
+    run_cmd "wget -q -c https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nor_n72ap.bin -O roms/nor_n72ap.bin" "NOR"
 
     if [ ! -d "$WORKSPACE/nand" ]; then
-        (wget -q -c "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip" -O nand_n72ap.zip >> "$LOG_FILE" 2>&1) &
-        spinner $! "NAND"
-        (unzip -o -q nand_n72ap.zip -d "$WORKSPACE/" && rm nand_n72ap.zip >> "$LOG_FILE" 2>&1) &
-        spinner $! "Extract"
+        run_cmd "wget -q -c https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip -O nand.zip" "NAND"
+        run_cmd "unzip -o -q nand.zip -d $WORKSPACE && rm nand.zip" "Extract"
     fi
 }
 
-step_launchers() {
-    update_progress
-    cat > "$HOME/start-ios.sh" << 'EOF'
+create_launcher() {
+cat > "$HOME/start-ios.sh" << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-pkill -9 -f "termux.x11" 2>/dev/null
-pkill -9 -f "openbox" 2>/dev/null
+pkill -9 -f termux.x11 2>/dev/null
+pkill -9 -f openbox 2>/dev/null
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity > /dev/null 2>&1
 termux-x11 :0 -ac &
 sleep 2
@@ -187,26 +161,33 @@ openbox-session &
 sleep 1
 xterm -e "~/qemu-ios/build/arm-softmmu/qemu-system-arm -M iPod-Touch,bootrom=~/ios-workspace/roms/bootrom_240_4,nand=~/ios-workspace/nand,nor=~/ios-workspace/roms/nor_n72ap.bin -serial mon:stdio -cpu max -m 512M; read" &
 EOF
-    chmod +x "$HOME/start-ios.sh"
-}
-
-step_done() {
-    update_progress
-    echo -e "${GREEN}Done: bash ~/start-ios.sh${NC}"
+chmod +x "$HOME/start-ios.sh"
 }
 
 main() {
-    initialize_log
-    show_banner
-    step_preflight
-    step_update
-    step_dependencies
-    step_clone
-    step_configure
-    step_build
-    step_files
-    step_launchers
-    step_done
+    echo "=== LOG ===" > "$LOG_FILE"
+    print_header
+
+    ask_cores
+    ask_fast_mode
+
+    run_cmd "yes | pkg update -y && yes | pkg upgrade -y" "Updating system"
+
+    install_deps
+
+    if [ ! -d "$REPO_DIR" ]; then
+        run_cmd "git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git $REPO_DIR" "Cloning"
+    fi
+
+    patch_qemu
+    configure_build
+    build_qemu
+    download_files
+    create_launcher
+
+    print_line
+    echo -e "${GREEN}DONE -> bash ~/start-ios.sh${NC}"
+    print_line
 }
 
 main
