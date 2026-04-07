@@ -40,6 +40,7 @@ spinner() {
     local i=0
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
+        
         local progress=""
         if [ -f "$logfile" ]; then
             progress=$(tail -n 20 "$logfile" 2>/dev/null | grep -o "\[[0-9]*/[0-9]*\]" | tail -n 1)
@@ -50,7 +51,6 @@ spinner() {
         else
             printf "\r  ${YELLOW}⏳${NC} ${message} ${CYAN}${spin:$i:1}${NC}  "
         fi
-        
         sleep 0.1
     done
     wait $pid
@@ -59,11 +59,20 @@ spinner() {
         printf "\r  ${GREEN}✓${NC} ${message}                    \n"
     else
         printf "\r  ${RED}✗${NC} ${message} ${RED}(failed)${NC}     \n"
-        if [ -n "$logfile" ] && [ -f "$logfile" ]; then
-            echo -e "\n${RED}================ ERROR LOG =================${NC}"
-            tail -n 20 "$logfile"
-            echo -e "${RED}============================================${NC}\n"
-        fi
+        exit 1
+    fi
+}
+
+step_build() {
+    update_progress
+    echo -e "${PURPLE}[Step ${CURRENT_STEP}/${TOTAL_STEPS}] Compiling QEMU-iOS (This takes a while)...${NC}"
+    echo ""
+    cd ~/qemu-ios/build
+    (make -j${CPU_CORES} > build.log 2>&1) &
+    spinner $! "Compiling with ${CPU_CORES} cores..." "build.log"
+    
+    if [ ! -f "arm-softmmu/qemu-system-arm" ]; then
+        echo -e "  ${RED}✗${NC} Compilation may have failed. Executable not found."
         exit 1
     fi
 }
@@ -191,13 +200,18 @@ step_configure() {
     echo ""
     cd ~/qemu-ios
     
-    echo -e "  ${YELLOW}🔧${NC} Applying Termux compatibility patches..."
+    echo -e "  ${YELLOW}🔧${NC} Applying surgical Termux patches..."
     
     git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
+
+    sed -i 's/#ifdef CONFIG_BLKZONED/#if 0/g' block/file-posix.c
+    sed -i 's/defined(CONFIG_BLKZONED)/0/g' block/file-posix.c
+    sed -i 's/#ifdef CONFIG_COPY_FILE_RANGE/#if 0/g' block/file-posix.c
+    sed -i 's/defined(CONFIG_COPY_FILE_RANGE)/0/g' block/file-posix.c
     
-    sed -i '1i #include <errno.h>\n#define copy_file_range(...) (errno = ENOSYS, -1)\n#define CONFIG_BLKZONED 0' block/file-posix.c
+    sed -i '1i #include <errno.h>\n#define copy_file_range(...) (errno = 38, -1)' block/file-posix.c
     
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
