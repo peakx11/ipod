@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 CURRENT_STEP=0
 CPU_CORES=4
 FAST_MODE=0
@@ -272,60 +272,85 @@ step_clone() {
     overall_progress "Fetching QEMU-iOS source..."
     cd "$HOME"
 
-    if [ -d "$REPO_DIR/.git" ]; then
-        if [ "$FAST_MODE" -eq 1 ]; then
-            echo "[INFO] Existing repository found. Skipping clone."
-            return
-        fi
+    if [ -d "$REPO_DIR" ]; then
+        if [ -f "$REPO_DIR/configure" ] || [ -f "$REPO_DIR/meson.build" ]; then
+            if [ "$FAST_MODE" -eq 1 ]; then
+                echo "[INFO] Existing QEMU-iOS source found. Skipping clone."
+                return
+            fi
 
-        echo -e "  ${YELLOW}⚠️ Existing qemu-ios repository detected.${NC}"
-        echo -e "  ${CYAN}[1] Use existing source${NC}"
-        echo -e "  ${CYAN}[2] Re-clone fresh${NC}"
-        echo ""
-        while true; do
-            echo -ne "  ${YELLOW}Select option [1-2]: ${NC}"
-            read CHOICE
-            case "$CHOICE" in
-                1)
-                    echo -e "  ${GREEN}✓ Using existing source${NC}"
-                    return
-                    ;;
-                2)
-                    rm -rf "$REPO_DIR"
-                    break
-                    ;;
-                *)
-                    echo -e "  ${RED}Invalid option${NC}"
-                    ;;
-            esac
-        done
+            echo -e "  ${YELLOW}⚠️ Existing qemu-ios folder detected.${NC}"
+            echo -e "  ${CYAN}[1] Use existing source${NC}"
+            echo -e "  ${CYAN}[2] Re-clone fresh${NC}"
+            echo ""
+            while true; do
+                echo -ne "  ${YELLOW}Select option [1-2]: ${NC}"
+                read CHOICE
+                case "$CHOICE" in
+                    1)
+                        echo -e "  ${GREEN}✓ Using existing source${NC}"
+                        return
+                        ;;
+                    2)
+                        rm -rf "$REPO_DIR"
+                        break
+                        ;;
+                    *)
+                        echo -e "  ${RED}Invalid option${NC}"
+                        ;;
+                esac
+            done
+        else
+            rm -rf "$REPO_DIR"
+        fi
     fi
 
     run_cmd "git clone -b ipod_touch_2g https://github.com/devos50/qemu-ios.git '$REPO_DIR'" "Cloning devos50/qemu-ios (ipod_touch_2g branch)..."
+}
+
+step_clean_generated() {
+    overall_progress "Removing generated build files..."
+    cd "$REPO_DIR"
+    rm -rf build
+    rm -f config.log config.status
 }
 
 step_configure() {
     overall_progress "Configuring build environment..."
     cd "$REPO_DIR"
 
-    git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
+    if [ -d ".git" ]; then
+        git checkout -- block/file-posix.c util/oslib-posix.c hw/scsi/scsi-disk.c hw/scsi/scsi-generic.c 2>/dev/null || true
+    fi
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
-    sed -i 's/pr_manager_execute/termux_pr_mgr_stub/g' block/file-posix.c
 
     cat << 'EOF' > fix_header.h
+#ifndef TERMUX_QEMU_IOS_FIX_HEADER_H
+#define TERMUX_QEMU_IOS_FIX_HEADER_H
+
 #include <errno.h>
 #include <stddef.h>
 #include <sys/syscall.h>
+
 static inline int get_sysfs_str_val(void* a, const char* b, char** c) { return -1; }
 static inline long get_sysfs_long_val(void* a, const char* b) { return -1; }
 static inline int copy_file_range(int a, void* b, int c, void* d, size_t e, unsigned int f) { errno = ENOSYS; return -1; }
-static inline int termux_pr_mgr_stub(void* a, ...) { return -1; }
+static inline int termux_pr_mgr_stub(void* a, ...) { errno = ENOSYS; return -1; }
+
+#define pr_manager_execute termux_pr_mgr_stub
+
+#ifndef SG_ERR_DRIVER_TIMEOUT
+#define SG_ERR_DRIVER_TIMEOUT 0
+#endif
+
+#ifndef SG_ERR_DRIVER_SENSE
+#define SG_ERR_DRIVER_SENSE 0
+#endif
+
+#endif
 EOF
 
-    sed -i '1i #include "fix_header.h"' block/file-posix.c
-
-    rm -rf build
     mkdir -p build
     cd build
 
@@ -338,9 +363,10 @@ EOF
         --disable-slirp \
         --disable-werror \
         --enable-pie \
+        --disable-vhost-user \
         --disable-linux-aio \
-        --extra-cflags=\"-I$PREFIX/include -I$PREFIX/include/X11 -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0\" \
-        --extra-ldflags=\"-L$PREFIX/lib -lX11\"" "Running configure..."
+        --extra-cflags='-include $REPO_DIR/fix_header.h -I$PREFIX/include -I$PREFIX/include/X11 -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined' \
+        --extra-ldflags='-L$PREFIX/lib -lX11'" "Running configure..."
 }
 
 step_build() {
@@ -351,6 +377,7 @@ step_build() {
     export NINJA_STATUS="[%f/%t] "
 
     if [ "$FAST_MODE" -eq 1 ]; then
+        echo "[${CURRENT_STEP}/${TOTAL_STEPS}] Building with ${CPU_CORES} cores..."
         make -j"$CPU_CORES" >> "$LOG_FILE" 2>&1
         local code=$?
         if [ $code -ne 0 ]; then
@@ -360,7 +387,7 @@ step_build() {
         return
     fi
 
-    make -j"$CPU_CORES" 2>&1 | tee -a "$LOG_FILE"
+    make -j"$CPU_CORES" 2>&1 | tee -a "$LOG_FILE" | grep --line-buffered -oE '^\[[0-9]+/[0-9]+\]'
     local code=${PIPESTATUS[0]}
     if [ $code -ne 0 ]; then
         tail -n 40 "$LOG_FILE"
@@ -450,6 +477,7 @@ main() {
     step_x11_setup
     step_dependencies
     step_clone
+    step_clean_generated
     step_configure
     step_build
     step_files
