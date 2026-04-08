@@ -260,7 +260,9 @@ EOF
        --enable-pie \
        --extra-cflags="-I$PREFIX/include -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0" \
        --extra-ldflags="-L$PREFIX/lib" > configure.log 2>&1) &
-} #
+       
+    spinner $! "Configuring build..." "configure.log" 0
+} 
 
 step_build() {
     update_progress
