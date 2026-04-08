@@ -21,7 +21,8 @@ exec </dev/tty >/dev/tty 2>&1
 
 cleanup() {
     echo -e "\n${RED}Build Failed${NC}"
-    [ -f "$LOG_FILE" ] && tail -n 60 "$LOG_FILE"
+    echo -e "${YELLOW}Last errors:${NC}"
+    [ -f "$LOG_FILE" ] && tail -n 80 "$LOG_FILE"
     pkill -P $$ 2>/dev/null
     exit 1
 }
@@ -68,14 +69,20 @@ spinner() {
 
     while kill -0 "$pid" 2>/dev/null; do
         i=$(( (i+1)%10 ))
-        prog=$(tail -n 30 "$LOG_FILE" 2>/dev/null | grep -oE '\[[0-9]+/[0-9]+\]' | tail -n1)
-        [ -z "$prog" ] && prog="[..../....]"
-        printf "\r${YELLOW}%s${NC} %s %s " "${spin:$i:1}" "$msg" "$prog"
+        printf "\r${YELLOW}%s${NC} %s " "${spin:$i:1}" "$msg"
         sleep 0.1
     done
 
     wait "$pid"
-    printf "\r${GREEN}✓${NC} %s\n" "$msg"
+    local code=$?
+
+    if [ $code -ne 0 ]; then
+        printf "\r${RED}✗${NC} %s\n" "$msg"
+        tail -n 40 "$LOG_FILE"
+        exit $code
+    else
+        printf "\r${GREEN}✓${NC} %s\n" "$msg"
+    fi
 }
 
 run_cmd() {
@@ -164,8 +171,6 @@ step_clean() {
     overall_progress "Cleaning"
     cd "$REPO_DIR"
     rm -rf build
-    find . -name "*.o" -delete
-    find . -name "*.a" -delete
 }
 
 apply_patches() {
@@ -180,9 +185,6 @@ static inline int termux_pr_mgr_stub(void* a, ...) { errno = ENOSYS; return -1; 
 EOF
 
     sed -i '1i #include "fix_header.h"' block/file-posix.c
-
-    sed -i 's/SG_ERR_DRIVER_TIMEOUT/0/g' hw/scsi/scsi-disk.c 2>/dev/null
-    sed -i 's/SG_ERR_DRIVER_SENSE/0/g' hw/scsi/scsi-generic.c 2>/dev/null
 }
 
 step_configure() {
@@ -197,15 +199,24 @@ step_configure() {
     --disable-slirp \
     --disable-linux-aio \
     --enable-sdl \
-    --extra-cflags='-O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined' \
+    --extra-cflags='-O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0' \
     --extra-ldflags='-lX11'" "Configuring"
 }
 
 step_build() {
     overall_progress "Building"
     cd "$REPO_DIR/build"
+
     export NINJA_STATUS="[%f/%t] "
-    run_cmd "make -j$CPU_CORES" "Building with $CPU_CORES cores"
+
+    make -j"$CPU_CORES" 2>&1 | tee -a "$LOG_FILE"
+    local code=${PIPESTATUS[0]}
+
+    if [ $code -ne 0 ]; then
+        echo -e "${RED}Build failed${NC}"
+        tail -n 60 "$LOG_FILE"
+        exit $code
+    fi
 }
 
 step_files() {
@@ -224,12 +235,15 @@ step_launcher() {
 cat > "$HOME/start-ios.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-termux-x11 :0 &
+termux-x11 :0 -ac &
 sleep 2
 export DISPLAY=:0
 openbox-session &
 sleep 1
-~/qemu-ios/build/arm-softmmu/qemu-system-arm -M iPod-Touch,bootrom=~/ios-workspace/roms/bootrom_240_4,nand=~/ios-workspace/nand,nor=~/ios-workspace/roms/nor_n72ap.bin -cpu max -smp $CPU_CORES -m 512M
+
+/data/data/com.termux/files/home/qemu-ios/build/arm-softmmu/qemu-system-arm \\
+-M iPod-Touch,bootrom=/data/data/com.termux/files/home/ios-workspace/roms/bootrom_240_4,nand=/data/data/com.termux/files/home/ios-workspace/nand,nor=/data/data/com.termux/files/home/ios-workspace/roms/nor_n72ap.bin \\
+-cpu max -smp $CPU_CORES -m 512M -serial mon:stdio
 EOF
 
 chmod +x "$HOME/start-ios.sh"
