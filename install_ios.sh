@@ -60,24 +60,35 @@ BANNER
 
 overall_progress() {
     CURRENT_STEP=$((CURRENT_STEP + 1))
+
+    if [ "$FAST_MODE" -eq 1 ]; then
+        echo "[${CURRENT_STEP}/${TOTAL_STEPS}] $1"
+        return
+    fi
+
     local percent=$((CURRENT_STEP * 100 / TOTAL_STEPS))
     local filled=$((percent / 5))
     local empty=$((20 - filled))
     local bar="${GREEN}"
-    for ((i=0; i<filled; i++)); do bar+="█"; done
+
+    for ((i=0; i<filled; i++)); do
+        bar+="█"
+    done
+
     bar+="${GRAY}"
-    for ((i=0; i<empty; i++)); do bar+="░"; done
+
+    for ((i=0; i<empty; i++)); do
+        bar+="░"
+    done
+
     bar+="${NC}"
 
-    if [ "$FAST_MODE" -eq 0 ]; then
-        echo ""
-        echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${CYAN}  📊 OVERALL PROGRESS: ${WHITE}Step ${CURRENT_STEP}/${TOTAL_STEPS}${NC} ${bar} ${WHITE}${percent}%${NC}"
-        echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-    else
-        echo "[STEP ${CURRENT_STEP}/${TOTAL_STEPS}] $1"
-    fi
+    echo ""
+    echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  [${CURRENT_STEP}/${TOTAL_STEPS}] ${WHITE}$1${NC}"
+    echo -e "  ${bar} ${WHITE}${percent}%${NC}"
+    echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
 }
 
 spinner() {
@@ -114,11 +125,9 @@ run_cmd() {
     local message="$2"
 
     if [ "$FAST_MODE" -eq 1 ]; then
-        echo "[INFO] $message"
         bash -lc "$cmd" >> "$LOG_FILE" 2>&1
         local code=$?
         if [ $code -ne 0 ]; then
-            echo "[ERROR] $message"
             tail -n 40 "$LOG_FILE"
             exit $code
         fi
@@ -129,7 +138,6 @@ run_cmd() {
     spinner $! "$message"
     local code=$?
     if [ $code -ne 0 ]; then
-        echo -e "${RED}Last log output:${NC}"
         tail -n 40 "$LOG_FILE"
         exit $code
     fi
@@ -139,6 +147,23 @@ install_pkg() {
     local pkg="$1"
     local name="${2:-$pkg}"
     run_cmd "yes | pkg install $pkg -y" "Installing ${name}..."
+}
+
+download_file() {
+    local url="$1"
+    local out="$2"
+    local label="$3"
+
+    if [ -f "$out" ]; then
+        if [ "$FAST_MODE" -eq 1 ]; then
+            echo "[INFO] ${label} already exists"
+        else
+            echo -e "  ${GREEN}✓${NC} ${label} already exists"
+        fi
+        return
+    fi
+
+    run_cmd "wget -q -c '$url' -O '$out'" "Downloading ${label}..."
 }
 
 ask_fast_mode() {
@@ -288,9 +313,6 @@ step_configure() {
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
     sed -i 's/pr_manager_execute/termux_pr_mgr_stub/g' block/file-posix.c
 
-    sed -i '1i #ifndef SG_ERR_DRIVER_TIMEOUT\n#define SG_ERR_DRIVER_TIMEOUT 0x06\n#endif' hw/scsi/scsi-disk.c
-    sed -i 's/SG_ERR_DRIVER_TIMEOUT/0/g' hw/scsi/scsi-disk.c
-
     cat << 'EOF' > fix_header.h
 #include <errno.h>
 #include <stddef.h>
@@ -316,16 +338,17 @@ EOF
         --disable-slirp \
         --disable-werror \
         --enable-pie \
-        --disable-vhost-user \
         --disable-linux-aio \
-        --extra-cflags='-I$PREFIX/include -I$PREFIX/include/X11 -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration' \
-        --extra-ldflags='-L$PREFIX/lib -lX11'" "Running configure..."
+        --extra-cflags=\"-I$PREFIX/include -I$PREFIX/include/X11 -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0\" \
+        --extra-ldflags=\"-L$PREFIX/lib -lX11\"" "Running configure..."
 }
 
 step_build() {
     overall_progress "Compiling QEMU-iOS with ${CPU_CORES} cores..."
     cd "$REPO_DIR/build"
     rm -f libblock.fa.p/block_file-posix.c.o
+
+    export NINJA_STATUS="[%f/%t] "
 
     if [ "$FAST_MODE" -eq 1 ]; then
         make -j"$CPU_CORES" >> "$LOG_FILE" 2>&1
@@ -337,9 +360,8 @@ step_build() {
         return
     fi
 
-    (make -j"$CPU_CORES" >> "$LOG_FILE" 2>&1) &
-    spinner $! "Building with ${CPU_CORES} cores..."
-    local code=$?
+    make -j"$CPU_CORES" 2>&1 | tee -a "$LOG_FILE"
+    local code=${PIPESTATUS[0]}
     if [ $code -ne 0 ]; then
         tail -n 40 "$LOG_FILE"
         exit $code
@@ -351,18 +373,11 @@ step_files() {
     mkdir -p "$WORKSPACE/roms"
     cd "$WORKSPACE"
 
-    if [ ! -f "$WORKSPACE/roms/bootrom_240_4" ]; then
-        run_cmd "wget -q -c 'https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/bootrom_240_4' -O 'roms/bootrom_240_4'" "Downloading BootROM..."
-    fi
-
-    if [ ! -f "$WORKSPACE/roms/nor_n72ap.bin" ]; then
-        run_cmd "wget -q -c 'https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nor_n72ap.bin' -O 'roms/nor_n72ap.bin'" "Downloading NOR..."
-    fi
+    download_file "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/bootrom_240_4" "$WORKSPACE/roms/bootrom_240_4" "BootROM"
+    download_file "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nor_n72ap.bin" "$WORKSPACE/roms/nor_n72ap.bin" "NOR image"
+    download_file "https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip" "$WORKSPACE/nand_n72ap.zip" "NAND zip"
 
     if [ ! -d "$WORKSPACE/nand" ]; then
-        if [ ! -f "$WORKSPACE/nand_n72ap.zip" ]; then
-            run_cmd "wget -q -c 'https://github.com/devos50/qemu-ios/releases/download/n72ap_v1/nand_n72ap.zip' -O 'nand_n72ap.zip'" "Downloading NAND archive..."
-        fi
         run_cmd "unzip -o -q nand_n72ap.zip -d '$WORKSPACE/' && rm -f nand_n72ap.zip" "Extracting NAND..."
     fi
 }
