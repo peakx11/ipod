@@ -49,6 +49,11 @@ To run this lab successfully, your device should meet the following specificatio
 ### 1. Prepare Termux
 Ensure your Termux environment is updated and has storage access:
 ```bash
+# - Apps
+you'll need these 2 apps
+Termux - Github (NOT PLAYSTORE)
+Termux:X11
+
 # - Setup storage 
 termux-setup-storage
 
