@@ -248,17 +248,19 @@ EOF
     cd build
 
     (../configure \
-        --enable-sdl \
-        --disable-cocoa \
-        --target-list=arm-softmmu \
-        --disable-capstone \
-        --disable-slirp \
-        --disable-werror \
-        --enable-pie \
-        --extra-cflags="-I$PREFIX/include -I$PREFIX/include/openssl -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0" \
-        --extra-ldflags="-L$PREFIX/lib -lcrypto" > configure.log 2>&1) &
-    spinner $! "Running ./configure..." "configure.log" 0
-}
+       --enable-sdl \
+       --disable-cocoa \
+       --target-list=arm-softmmu \
+       --disable-capstone \
+       --disable-slirp \
+       --disable-werror \
+       --disable-opengl \
+       --disable-gtk \
+       --disable-vte \
+       --enable-pie \
+       --extra-cflags="-I$PREFIX/include -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0" \
+       --extra-ldflags="-L$PREFIX/lib" > configure.log 2>&1) &
+} #
 
 step_build() {
     update_progress
