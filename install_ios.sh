@@ -384,7 +384,16 @@ sleep 1
 
 cd ~/ios-workspace
 
-xterm -geometry 80x24 -title "QEMU-iOS" -e bash -c 
+xterm -geometry 80x24 -title "QEMU-iOS" -e bash -c '
+(
+while true; do
+    read -rsn1 key
+    if [[ $key == $'\''\e'\'' ]]; then
+        echo "sendkey home"
+    fi
+done
+) &
+
 "~/qemu-ios/build/arm-softmmu/qemu-system-arm \
 -M iPod-Touch,bootrom=roms/bootrom_240_4,nand=nand,nor=roms/nor_n72ap.bin \
 -serial mon:stdio \
