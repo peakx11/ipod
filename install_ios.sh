@@ -384,7 +384,16 @@ sleep 1
 
 cd ~/ios-workspace
 
-aterm -geometry 80x24 -title "QEMU-iOS" -e bash -c "~/qemu-ios/build/arm-softmmu/qemu-system-arm -M iPod-Touch,bootrom=roms/bootrom_240_4,nand=nand,nor=roms/nor_n72ap.bin -serial mon:stdio -cpu max -m 2G -d unimp; echo 'Process finished. Press Enter to close.'; read" &
+xterm -geometry 80x24 -title "QEMU-iOS" -e bash -c 
+"~/qemu-ios/build/arm-softmmu/qemu-system-arm \
+-M iPod-Touch,bootrom=roms/bootrom_240_4,nand=nand,nor=roms/nor_n72ap.bin \
+-serial mon:stdio \
+-cpu max \
+-m 2G \
+-device usb-mouse \
+-device usb-kbd \
+-display sdl \
+-d unimp; echo 'Process finished. Press Enter to close.'; read" &
 
 LAUNCHEREOF
     chmod +x ~/start-ios.sh
