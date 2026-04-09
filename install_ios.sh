@@ -251,7 +251,6 @@ static inline int copy_file_range(int a, void* b, int c, void* d, size_t e, unsi
 #define UFFDIO_REGISTER_MODE_WP 0
 #endif
 
-/* Fallback just in case linux/userfaultfd.h is completely missing struct uffd_msg */
 #ifndef UFFD_EVENT_PAGEFAULT
 #define UFFD_EVENT_PAGEFAULT 0x12
 struct uffd_msg {
@@ -294,6 +293,17 @@ EOF
     sed -i '1i #include "fix_header.h"' block/file-posix.c
     sed -i '1i #include "fix_header.h"' migration/ram.c
 
+    echo -e "  ${YELLOW}🔨${NC} Creating Linker Stubs..."
+    cat > linker_stubs.c << 'EOF'
+int uffd_register_memory() { return -1; }
+int uffd_change_protection() { return -1; }
+int uffd_unregister_memory() { return -1; }
+int uffd_read_events() { return -1; }
+int pr_manager_execute() { return -1; }
+EOF
+    clang -O2 -c linker_stubs.c -o linker_stubs.o
+    STUBS_OBJ="$(pwd)/linker_stubs.o"
+
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
     mkdir -p build
@@ -311,7 +321,7 @@ EOF
        --disable-vte \
        --enable-pie \
        --extra-cflags="-I$PREFIX/include -O2 -pipe -fomit-frame-pointer -Wno-implicit-function-declaration -Wno-macro-redefined -DSG_ERR_DRIVER_TIMEOUT=0 -DSG_ERR_DRIVER_SENSE=0" \
-       --extra-ldflags="-L$PREFIX/lib" > configure.log 2>&1) &
+       --extra-ldflags="-L$PREFIX/lib $STUBS_OBJ" > configure.log 2>&1) &
        
     spinner $! "Configuring build..." "configure.log" 0
 }
