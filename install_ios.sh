@@ -214,7 +214,7 @@ step_configure() {
 
     echo -e "  ${YELLOW}🔧${NC} Applying Termux compatibility patches..."
 
-    git checkout block/file-posix.c util/oslib-posix.c migration/ram.c 2>/dev/null
+    git checkout block/file-posix.c util/oslib-posix.c migration/ram.c migration/postcopy-ram.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
 
@@ -292,6 +292,7 @@ EOF
 
     sed -i '1i #include "fix_header.h"' block/file-posix.c
     sed -i '1i #include "fix_header.h"' migration/ram.c
+    sed -i '1i #include "fix_header.h"' migration/postcopy-ram.c
 
     echo -e "  ${YELLOW}🔨${NC} Creating Linker Stubs..."
     cat > linker_stubs.c << 'EOF'
@@ -303,6 +304,7 @@ int pr_manager_execute() { return -1; }
 int uffd_query_features() { return -1; }
 int uffd_create_fd() { return -1; }
 int uffd_close_fd() { return -1; }
+int uffd_open() { return -1; }
 EOF
     clang -O2 -c linker_stubs.c -o linker_stubs.o
     STUBS_OBJ="$(pwd)/linker_stubs.o"
