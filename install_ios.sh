@@ -214,7 +214,7 @@ step_configure() {
 
     echo -e "  ${YELLOW}🔧${NC} Applying Termux compatibility patches..."
 
-    git checkout block/file-posix.c util/oslib-posix.c 2>/dev/null
+    git checkout block/file-posix.c util/oslib-posix.c migration/ram.c 2>/dev/null
 
     sed -i 's/syscall(SYS_gettid)/gettid()/g' util/oslib-posix.c
 
@@ -224,6 +224,8 @@ step_configure() {
 
 #include <errno.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <linux/userfaultfd.h>
 
 #ifndef SG_ERR_DRIVER_TIMEOUT
 #define SG_ERR_DRIVER_TIMEOUT 0
@@ -237,10 +239,60 @@ static inline int get_sysfs_str_val(void* a, const char* b, char** c) { return -
 static inline long get_sysfs_long_val(void* a, const char* b) { return -1; }
 static inline int copy_file_range(int a, void* b, int c, void* d, size_t e, unsigned int f) { errno = ENOSYS; return -1; }
 
+#ifndef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+#define UFFD_FEATURE_PAGEFAULT_FLAG_WP 0
+#endif
+
+#ifndef _UFFDIO_WRITEPROTECT
+#define _UFFDIO_WRITEPROTECT 0
+#endif
+
+#ifndef UFFDIO_REGISTER_MODE_WP
+#define UFFDIO_REGISTER_MODE_WP 0
+#endif
+
+/* Fallback just in case linux/userfaultfd.h is completely missing struct uffd_msg */
+#ifndef UFFD_EVENT_PAGEFAULT
+#define UFFD_EVENT_PAGEFAULT 0x12
+struct uffd_msg {
+    uint8_t event;
+    uint8_t reserved1;
+    uint16_t reserved2;
+    uint32_t reserved3;
+    union {
+        struct {
+            uint64_t flags;
+            uint64_t address;
+            union {
+                uint32_t ptid;
+            } feat;
+        } pagefault;
+        struct {
+            uint32_t uffd;
+        } fork;
+        struct {
+            uint64_t from;
+            uint64_t to;
+            uint64_t len;
+        } remap;
+        struct {
+            uint64_t start;
+            uint64_t end;
+        } remove;
+        struct {
+            uint64_t reserved1;
+            uint64_t reserved2;
+            uint64_t reserved3;
+        } reserved;
+    } arg;
+} __attribute__((packed));
+#endif
+
 #endif
 EOF
 
     sed -i '1i #include "fix_header.h"' block/file-posix.c
+    sed -i '1i #include "fix_header.h"' migration/ram.c
 
     echo -e "  ${YELLOW}🧹${NC} Cleaning up previous build files..."
     rm -rf build
@@ -262,7 +314,7 @@ EOF
        --extra-ldflags="-L$PREFIX/lib" > configure.log 2>&1) &
        
     spinner $! "Configuring build..." "configure.log" 0
-} 
+}
 
 step_build() {
     update_progress
